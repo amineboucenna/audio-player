@@ -1,0 +1,352 @@
+import 'package:audio_player/PlayingNext.dart';
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:just_audio/just_audio.dart';
+import 'package:flutter_media_metadata/flutter_media_metadata.dart';
+import 'styles.dart';
+
+class PlayingLayout extends StatefulWidget {
+  final List<File> audioFiles;
+  final String playlistName;
+  final int initialIndex;
+
+  PlayingLayout(
+      {required this.audioFiles,
+      required this.playlistName,
+      required this.initialIndex});
+
+  @override
+  _PlayingLayoutState createState() => _PlayingLayoutState();
+}
+
+class _PlayingLayoutState extends State<PlayingLayout> {
+  late AudioPlayer _audioPlayer;
+  late int _currentIndex;
+  late Duration _currentDuration;
+  late Duration _totalDuration;
+  Metadata? _currentMetadata;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _currentDuration = Duration.zero;
+    _totalDuration = Duration.zero;
+    _currentIndex = widget.initialIndex;
+    _loadAudioFile(widget.audioFiles[_currentIndex]);
+
+    _audioPlayer.positionStream.listen((position) {
+      setState(() {
+        _currentDuration = position;
+      });
+
+      if (_currentDuration.inMilliseconds >=
+          (_totalDuration.inMilliseconds - 100)) {
+        _playNext();
+      }
+    });
+  }
+
+  Future<void> _loadAudioFile(File file) async {
+    try {
+      await _audioPlayer.setUrl(file.path);
+      _currentMetadata = await MetadataRetriever.fromFile(file);
+      setState(() {
+        _currentDuration = Duration.zero;
+        _totalDuration = _audioPlayer.duration ?? Duration.zero;
+      });
+    } catch (e) {
+      print("Error loading audio file: $e");
+      setState(() {
+        _totalDuration = Duration.zero;
+        _currentMetadata = null;
+      });
+    }
+  }
+
+  void _playNext() {
+    setState(() {
+      _currentIndex = (_currentIndex + 1) % widget.audioFiles.length;
+      _loadAudioFile(widget.audioFiles[_currentIndex]);
+    });
+  }
+
+  void _playPrevious() {
+    _currentIndex = (_currentIndex - 1 + widget.audioFiles.length) %
+        widget.audioFiles.length;
+    _loadAudioFile(widget.audioFiles[_currentIndex]);
+  }
+
+  void _toggleShuffle() {
+    _audioPlayer.setShuffleModeEnabled(!_audioPlayer.shuffleModeEnabled);
+  }
+
+  void _toggleReplay() {
+    _audioPlayer.setLoopMode(
+        _audioPlayer.loopMode == LoopMode.one ? LoopMode.off : LoopMode.one);
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double playbackButtonSize = MediaQuery.of(context).size.width * 0.15;
+    final double otherIconSize = MediaQuery.of(context).size.width * 0.08;
+    final bool isReplayEnabled = _audioPlayer.loopMode == LoopMode.one;
+    bool isShuffleEnabled = _audioPlayer.shuffleModeEnabled;
+
+    return Scaffold(
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.05),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.01),
+                  Text(
+                    "PLAYING FROM",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.white,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        widget.playlistName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.gold,
+                          fontSize: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            Center(
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.9,
+                height: MediaQuery.of(context).size.height * 0.4,
+                decoration: BoxDecoration(
+                  color: AppColors.darker,
+                  borderRadius: BorderRadius.circular(15),
+                  image: (_currentMetadata?.albumArt != null)
+                      ? DecorationImage(
+                          image: MemoryImage(_currentMetadata!.albumArt!),
+                          fit: BoxFit.cover,
+                        )
+                      : DecorationImage(
+                          image: AssetImage('images/cover.png'),
+                          fit: BoxFit.cover,
+                        ),
+                ),
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width * 0.05,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.audioFiles[_currentIndex].uri.pathSegments.last,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      color: AppColors.pink,
+                    ),
+                  ),
+                  Text(
+                    _currentMetadata?.albumArtistName ?? "Unknown Artist",
+                    style: TextStyle(
+                      color: AppColors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width * 0.01,
+              ),
+              child: SliderTheme(
+                data: SliderThemeData(
+                  trackHeight: 6,
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8),
+                  overlayShape: RoundSliderOverlayShape(overlayRadius: 16),
+                ),
+                child: Slider(
+                  activeColor: AppColors.pink,
+                  inactiveColor: AppColors.white,
+                  value: _currentDuration.inMilliseconds
+                      .toDouble()
+                      .clamp(0.0, _totalDuration.inMilliseconds.toDouble()),
+                  min: 0.0,
+                  max: _totalDuration.inMilliseconds.toDouble(),
+                  onChanged: (value) {
+                    setState(() {
+                      _currentDuration = Duration(
+                          milliseconds: value
+                              .toInt()
+                              .clamp(0, _totalDuration.inMilliseconds));
+
+                      if (_currentDuration.inMilliseconds >=
+                          _totalDuration.inMilliseconds - 100) {
+                        if (isReplayEnabled) {
+                          _audioPlayer.seek(Duration.zero);
+                          _audioPlayer.play();
+                        } else {
+                          _playNext();
+                        }
+                      }
+                    });
+                  },
+                  onChangeEnd: (value) {
+                    _audioPlayer.seek(Duration(
+                        milliseconds: value
+                            .toInt()
+                            .clamp(0, _totalDuration.inMilliseconds)));
+                  },
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.of(context).size.width * 0.05),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDuration(_currentDuration),
+                    style: TextStyle(
+                        color: AppColors.white, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    _formatDuration(_totalDuration),
+                    style: TextStyle(
+                        color: AppColors.white, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width * 0.05,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.shuffle,
+                      size: otherIconSize,
+                      color:
+                          isShuffleEnabled ? AppColors.pink : AppColors.white,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        isShuffleEnabled = !isShuffleEnabled;
+                      });
+                      _toggleShuffle();
+                    },
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        iconSize: playbackButtonSize,
+                        icon: Icon(Icons.skip_previous, color: AppColors.white),
+                        onPressed: _playPrevious,
+                      ),
+                      IconButton(
+                        iconSize: playbackButtonSize,
+                        icon: Icon(
+                            _audioPlayer.playing
+                                ? Icons.pause
+                                : Icons.play_arrow,
+                            color: AppColors.white),
+                        onPressed: () {
+                          _audioPlayer.playing
+                              ? _audioPlayer.pause()
+                              : _audioPlayer.play();
+                        },
+                      ),
+                      IconButton(
+                        iconSize: playbackButtonSize,
+                        icon: Icon(Icons.skip_next, color: AppColors.white),
+                        onPressed: _playNext,
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      isReplayEnabled ? Icons.repeat_one : Icons.repeat,
+                      size: otherIconSize,
+                      color: AppColors.white,
+                    ),
+                    onPressed: _toggleReplay,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.menu,
+                      size: otherIconSize, color: AppColors.white),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PlayingNext(
+                          audioFiles: widget.audioFiles,
+                          playlistName: widget.playlistName,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.05,
+                ),
+                Icon(Icons.sms_outlined,
+                    size: otherIconSize, color: AppColors.white),
+                SizedBox(width: MediaQuery.of(context).size.width * 0.05),
+                Icon(Icons.info_outline_rounded,
+                    size: otherIconSize, color: AppColors.white),
+              ],
+            )
+          ],
+        ),
+      ),
+      backgroundColor: AppColors.background,
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    String minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+    String seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}

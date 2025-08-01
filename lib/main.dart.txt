@@ -1,0 +1,130 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Foreground & Local Notifications',
+      home: const ForegroundServiceScreen(),
+    );
+  }
+}
+
+class ForegroundServiceScreen extends StatefulWidget {
+  const ForegroundServiceScreen({Key? key}) : super(key: key);
+
+  @override
+  State<ForegroundServiceScreen> createState() =>
+      _ForegroundServiceScreenState();
+}
+
+class _ForegroundServiceScreenState extends State<ForegroundServiceScreen> {
+  final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  bool _isServiceRunning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeForegroundTask();
+    _initializeLocalNotifications();
+  }
+
+  void _initializeForegroundTask() {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'default_channel',
+        channelName: 'Default',
+        channelDescription: 'Foreground service is running.',
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(
+        showNotification: true,
+        playSound: true,
+      ),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.repeat(1000),
+      ),
+    );
+  }
+
+  void _initializeLocalNotifications() async {
+    const AndroidInitializationSettings androidInitSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidInitSettings,
+    );
+    await _localNotificationsPlugin.initialize(initSettings);
+  }
+
+  Future<void> _startForegroundService() async {
+    await FlutterForegroundTask.startService(
+      notificationTitle: 'Service Running',
+      notificationText: 'Foreground service is active.',
+    );
+
+    setState(() {
+      _isServiceRunning = true;
+    });
+  }
+
+  Future<void> _stopForegroundService() async {
+    await FlutterForegroundTask.stopService();
+
+    setState(() {
+      _isServiceRunning = false;
+    });
+  }
+
+  Future<void> _showLocalNotification() async {
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: AndroidNotificationDetails('default_channel', 'Default'),
+    );
+
+    await _localNotificationsPlugin.show(
+      0,
+      'Hello!',
+      'This is a simple notification.',
+      notificationDetails,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Foreground & Local Notifications'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: _isServiceRunning ? null : _startForegroundService,
+              child: const Text('Start Service'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _isServiceRunning ? _stopForegroundService : null,
+              child: const Text('Stop Service'),
+            ),
+            const SizedBox(height: 40),
+            ElevatedButton(
+              onPressed: _showLocalNotification,
+              child: const Text('Show Notification'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
