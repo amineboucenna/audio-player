@@ -18,7 +18,7 @@ A minimalist audio player built with **Flutter** and **Dart**. It supports local
 ## 📦 Getting Started
 
 ```bash
-git clone https://github.com/your-username/audio-player.git
+git clone https://github.com/amineboucenna/audio-player.git
 cd audio-player
 flutter pub get
 flutter run
